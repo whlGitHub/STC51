@@ -15,7 +15,7 @@ void SendStr(unsigned char *str);
 
 uchar key_value,read_buf;
 const uchar code dscom[] = {0x00,0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0xff};
-const uchar code dsnum[] = {0xc0,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90};
+const uchar code dsnum[] = {0xc0,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90,0xff};
 
 void Delay500us();
 void Delay80us();
@@ -50,14 +50,15 @@ uint tt,freq;
 void Freq_Timer0(void);
 void Freq_Timer1(void);
 
+uint PWM_NUM;
+void PWM_Init();
+
 void main()
 {
 	All_Init();
-	Freq_Timer0();
-	Freq_Timer1();
-	UartInit();
+	PWM_Init();
 	EA = 1;
-	ET1 = 1;
+	ET0 = 1;
 	while(1)
 	{	
 		printf("Frenquence: %d\r\n",freq);
@@ -573,4 +574,33 @@ void Freq_Timer0(void)
 	TH0 = 0x00;                    //设置定时初值
 	TF0 = 0;                    //清除TF0标志
 	TR0 = 1;                    //定时器0开始计时
+}
+
+void PWM_Init(void)
+{
+	AUXR |= 0x80;		//定时器时钟1T模式
+	TMOD &= 0xF0;		//设置定时器模式
+	TL0 = 0xAE;		//设置定时初值
+	TH0 = 0xFB;		//设置定时初值
+	TF0 = 0;		//清除TF0标志
+	TR0 = 1;		//定时器0开始计时
+}
+
+void PWM_Output(void)	interrupt 1
+{
+	tt++;
+	if(tt == PWM_NUM)
+	{
+		Dis_Bit(1,1);
+	}
+	else if(tt == 100)
+	{
+		Dis_Bit(1,10);
+		tt = 0;
+		PWM_NUM++;
+		if(PWM_NUM == 100)
+		{
+			PWM_NUM = 0;
+		}
+	}
 }
