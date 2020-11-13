@@ -17,12 +17,11 @@ uchar key_value,read_buf;
 const uchar code dscom[] = {0x00,0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0xff};
 const uchar code dsnum[] = {0xc0,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90,0xff};
 
-void Delay500us();
-void Delay80us();
 void Write_DS18B20(unsigned char dat);
 unsigned char Read_DS18B20(void);
-void init_ds18b20(void);
-long Read_Temp();
+bit init_ds18b20(void);
+unsigned char ReadTemp(void);
+float ReadTempFloat(void);
 
 uchar Init_Time[7] = {50,59,23,16,10,5,20};
 uchar timeArray[7] ;
@@ -206,22 +205,32 @@ void SendStr(unsigned char *str)
         p++;
     }
 }
+sbit DQ = P1^4;
 
-sbit DQ = P1^4;  //单总线接口
+//单总线延时函数
+
+void Delay_OneWire(unsigned int t)  //STC12C5260S2
+{
+	unsigned char i;
+	while(t--){
+		for(i=0;i<12;i++);
+	}
+}
 
 //通过单总线向DS18B20写一个字节
 void Write_DS18B20(unsigned char dat)
 {
+
 	unsigned char i;
 	for(i=0;i<8;i++)
 	{
 		DQ = 0;
 		DQ = dat&0x01;
-		Delay80us();
+		Delay_OneWire(5);
 		DQ = 1;
 		dat >>= 1;
 	}
-	Delay80us();
+	Delay_OneWire(5);
 }
 
 //从DS18B20读取一个字节
@@ -239,65 +248,75 @@ unsigned char Read_DS18B20(void)
 		{
 			dat |= 0x80;
 		}	    
-		Delay80us();
+		Delay_OneWire(5);
 	}
 	return dat;
 }
 
-//DS18B20设备初始化
-void init_ds18b20(void)
+//DS18B20初始化
+bit init_ds18b20(void)
 {
-
-  	DQ = 0;
-  	Delay500us();
+  	bit initflag = 0;
+  	
   	DQ = 1;
-  	Delay500us();
-
+  	Delay_OneWire(12);
+  	DQ = 0;
+  	Delay_OneWire(80); // 延时大于480us
+  	DQ = 1;
+  	Delay_OneWire(10);  // 14
+  	initflag = DQ;     // initflag等于1初始化失败
+  	Delay_OneWire(5);
+  
+  	return initflag;
 }
 
-long Read_Temp()
+//DS18B20温度采集程序：整数
+unsigned char ReadTemp(void)
 {
-	long temp;
-	uchar low,high;
+	unsigned char low,high;
+	char temp;
+
 	init_ds18b20();
-	Write_DS18B20(0xcc);
-	Write_DS18B20(0x44);
-	Delay500us();
+	Write_DS18B20(0xCC);
+	Write_DS18B20(0x44); //启动温度转换
+	Delay_OneWire(200);
+
 	init_ds18b20();
-	Write_DS18B20(0xcc);
-	Write_DS18B20(0xbe);
-	low = Read_DS18B20();
-	high = Read_DS18B20();
-	temp = high<<8;
+	Write_DS18B20(0xCC);
+	Write_DS18B20(0xBE); //读取寄存器
+
+	low = Read_DS18B20(); //低字节
+	high = Read_DS18B20(); //高字节
+	/** 精度为1摄氏度 */  
+	temp = high<<4;
+	temp |= (low>>4);
+	return temp;
+}
+
+//DS18B20温度采集程序：浮点数
+float ReadTempFloat(void)
+{
+    unsigned int temp;
+	float temperature;
+    unsigned char low,high;
+  
+  	init_ds18b20();
+  	Write_DS18B20(0xCC);
+  	Write_DS18B20(0x44); //启动温度转换
+  	Delay_OneWire(200);
+
+  	init_ds18b20();
+  	Write_DS18B20(0xCC);
+  	Write_DS18B20(0xBE); //读取寄存器
+
+  	low = Read_DS18B20(); //低字节
+  	high = Read_DS18B20(); //高字节
+/** 精度为0.0625摄氏度 */  
+	temp = (high&0x0f);
+	temp <<= 8;
 	temp |= low;
-	return temp*625;
-}
-
-void Delay500us()		//@11.0592MHz
-{
-	unsigned char i, j;
-
-	_nop_();
-	_nop_();
-	i = 6;
-	j = 93;
-	do
-	{
-		while (--j);
-	} while (--i);
-}
-
-void Delay80us()		//@11.0592MHz
-{
-	unsigned char i, j;
-
-	_nop_();
-	i = 1;
-	j = 217;
-	do
-	{
-		while (--j);
-	} while (--i);
+	temperature = temp*0.0625;
+  	return temperature;
 }
 
 
